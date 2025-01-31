@@ -1,20 +1,22 @@
 ---
-import BaseLayout from "@/layouts/BaseLayout.astro";
-import { ImageInput } from "@/components/react/ImageInput";
+import BaseLayout from '@/layouts/BaseLayout.astro'
+import { ImageInput } from '@/components/react/ImageInput'
+import { ImageGrid } from '@/components/react/ImageGrid'
 ---
 
 <BaseLayout
-    title="Astro Shadcn UI Template"
-    description="This template helps you build apps with Astro, Tailwind CSS, and Shadcn UI."
+  title="Astro Shadcn UI Template"
+  description="This template helps you build apps with Astro, Tailwind CSS, and Shadcn UI."
 >
-    <section class="container grid items-center gap-6 pt-6 pb-8 md:py-10">
-        <div class="flex max-w-[980px] flex-col items-start gap-2">
-            <h1
-                class="text-3xl leading-tight font-extrabold tracking-tighter md:text-4xl"
-            >
-                IndexDB Liger
-            </h1>
-            <ImageInput client:load/>
-        </div>
-    </section>
+  <section class="container grid items-center gap-6 pb-8 pt-6 md:py-10">
+    <div class="flex max-w-[980px] flex-col items-start gap-2">
+      <h1
+        class="text-3xl font-extrabold leading-tight tracking-tighter md:text-4xl"
+      >
+        IndexDB Liger
+      </h1>
+      <ImageInput client:load />
+      <ImageGrid client:load />
+    </div>
+  </section>
 </BaseLayout>
