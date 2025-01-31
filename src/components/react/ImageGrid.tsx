@@ -118,7 +118,10 @@ export function ImageGrid() {
     )
   }
 
-  const displayedImages = filteredImages.length > 0 ? filteredImages : images
+  const isSearchComplete =
+    searchQuery !== '' && !searching && debouncedSearch === searchQuery
+  const displayedImages =
+    filteredImages.length > 0 ? filteredImages : isSearchComplete ? [] : images
 
   return (
     <>
@@ -142,6 +145,13 @@ export function ImageGrid() {
             No images uploaded yet
           </div>
         )}
+        {images.length > 0 &&
+          isSearchComplete &&
+          displayedImages.length === 0 && (
+            <div className="col-span-full p-8 text-center text-muted-foreground">
+              No images found matching "{searchQuery}"
+            </div>
+          )}
       </div>
       <ImagePreview
         image={previewImage}
