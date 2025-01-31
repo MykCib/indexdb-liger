@@ -3,12 +3,7 @@ export const prerender = false
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const REPLICATE_API_TOKEN = locals.runtime.env.REPLICATE_API_TOKEN
-  return new Response(JSON.stringify({ token: REPLICATE_API_TOKEN }), {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  })
+
   try {
     const formData = await request.formData()
     const file = formData.get('file') as File
