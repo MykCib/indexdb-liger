@@ -23,7 +23,9 @@ export function ImageSearch({
       />
       <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
       {isSearching && (
-        <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin" />
+        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+          <Loader2 className="h-4 w-4 animate-spin [&>*]:stroke-foreground" />
+        </div>
       )}
     </div>
   )

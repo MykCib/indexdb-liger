@@ -27,7 +27,7 @@ export interface SearchResult {
 export function rankImagesBySimilarity(
   searchEmbeddings: number[],
   images: { id: number; url: string; embeddings: number[] }[],
-  threshold = 0,
+  threshold = 0.2,
 ): SearchResult[] {
   return images
     .map((image) => ({
