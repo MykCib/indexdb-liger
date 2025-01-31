@@ -1,8 +1,8 @@
 import type { APIRoute } from 'astro'
 
-const REPLICATE_API_TOKEN = import.meta.env.REPLICATE_API_TOKEN
+export const POST: APIRoute = async ({ request, locals }) => {
+  const REPLICATE_API_TOKEN = locals.runtime.env.REPLICATE_API_TOKEN
 
-export const POST: APIRoute = async ({ request }) => {
   try {
     const { searchText } = await request.json()
 
