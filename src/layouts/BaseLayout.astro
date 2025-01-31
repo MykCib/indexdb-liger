@@ -1,0 +1,24 @@
+---
+import HeadSEO from "@/components/HeadSEO.astro";
+
+interface Props {
+    title?: string | undefined;
+    description?: string | undefined;
+    ogImage?: URL | undefined;
+}
+
+const { title, description, ogImage } = Astro.props;
+---
+
+<html lang="en">
+    <head>
+        <HeadSEO title={title} description={description} ogImage={ogImage} />
+    </head>
+    <body class="bg-background min-h-screen font-sans antialiased">
+        <div class="relative flex min-h-screen flex-col">
+            <main class="flex-auto">
+                <slot />
+            </main>
+        </div>
+    </body>
+</html>
