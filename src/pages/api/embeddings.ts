@@ -1,28 +1,34 @@
 import type { APIRoute } from 'astro'
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  let binary = ''
+  const bytes = new Uint8Array(buffer)
+  const len = bytes.byteLength
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  return btoa(binary)
+}
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const REPLICATE_API_TOKEN = locals.runtime.env.REPLICATE_API_TOKEN
 
   try {
-    // Log token existence (not the actual token)
     console.log('Token exists:', !!REPLICATE_API_TOKEN)
 
     const formData = await request.formData()
     const file = formData.get('file') as File
 
-    // Log file details
     console.log('File received:', {
       name: file?.name,
       type: file?.type,
       size: file?.size,
     })
 
-    // Convert file to base64
+    // Convert file to base64 using our custom function
     const arrayBuffer = await file.arrayBuffer()
-    const base64String = Buffer.from(arrayBuffer).toString('base64')
+    const base64String = arrayBufferToBase64(arrayBuffer)
     const dataUrl = `data:${file.type};base64,${base64String}`
 
-    // Log prediction request
     console.log('Making prediction request to Replicate')
 
     const predictionResponse = await fetch(
@@ -46,7 +52,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     const prediction = await predictionResponse.json()
 
-    // Log prediction response
     console.log('Prediction response:', {
       status: predictionResponse.status,
       ok: predictionResponse.ok,

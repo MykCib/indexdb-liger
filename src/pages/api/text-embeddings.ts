@@ -1,15 +1,18 @@
 import type { APIRoute } from 'astro'
 export const prerender = false
 
+function textToBase64(text: string): string {
+  return btoa(unescape(encodeURIComponent(text)))
+}
+
 export const POST: APIRoute = async ({ request, locals }) => {
   const REPLICATE_API_TOKEN = locals.runtime.env.REPLICATE_API_TOKEN
 
   try {
     const { searchText } = await request.json()
 
-    // Convert text to base64 and create a data URI
-    const textBytes = new TextEncoder().encode(searchText)
-    const base64String = Buffer.from(textBytes).toString('base64')
+    // Convert text to base64 using the browser-compatible function
+    const base64String = textToBase64(searchText)
     const dataUrl = `data:text/plain;base64,${base64String}`
 
     const predictionResponse = await fetch(
@@ -86,7 +89,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     })
   } catch (error) {
     console.error('API Error:', error)
-    return new Response(JSON.stringify({ error }), {
+    return new Response(JSON.stringify(error), {
       status: 500,
     })
   }
