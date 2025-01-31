@@ -19,6 +19,12 @@ export default defineConfig({
   output: 'server',
   adapter: cloudflare(),
   vite: {
+    envPrefix: ['PUBLIC_', 'REPLICATE_API_TOKEN'],
+    define: {
+      'process.env.REPLICATE_API_TOKEN': JSON.stringify(
+        process.env.REPLICATE_API_TOKEN,
+      ),
+    },
     resolve: {
       // Use react-dom/server.edge instead of react-dom/server.browser for React 19.
       // Without this, MessageChannel from node:worker_threads needs to be polyfilled.
