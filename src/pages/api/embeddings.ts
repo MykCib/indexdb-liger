@@ -1,19 +1,30 @@
 import type { APIRoute } from 'astro'
-export const prerender = false
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const REPLICATE_API_TOKEN = locals.runtime.env.REPLICATE_API_TOKEN
 
   try {
+    // Log token existence (not the actual token)
+    console.log('Token exists:', !!REPLICATE_API_TOKEN)
+
     const formData = await request.formData()
     const file = formData.get('file') as File
+
+    // Log file details
+    console.log('File received:', {
+      name: file?.name,
+      type: file?.type,
+      size: file?.size,
+    })
 
     // Convert file to base64
     const arrayBuffer = await file.arrayBuffer()
     const base64String = Buffer.from(arrayBuffer).toString('base64')
     const dataUrl = `data:${file.type};base64,${base64String}`
 
-    // Create prediction with image data
+    // Log prediction request
+    console.log('Making prediction request to Replicate')
+
     const predictionResponse = await fetch(
       'https://api.replicate.com/v1/predictions',
       {
@@ -34,6 +45,25 @@ export const POST: APIRoute = async ({ request, locals }) => {
     )
 
     const prediction = await predictionResponse.json()
+
+    // Log prediction response
+    console.log('Prediction response:', {
+      status: predictionResponse.status,
+      ok: predictionResponse.ok,
+      prediction: prediction,
+    })
+
+    if (!predictionResponse.ok) {
+      return new Response(
+        JSON.stringify({
+          error: 'Prediction request failed',
+          details: prediction,
+        }),
+        {
+          status: predictionResponse.status,
+        },
+      )
+    }
 
     if (prediction.error) {
       return new Response(JSON.stringify({ error: prediction.error }), {
