@@ -1,5 +1,6 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
+import { ImageInput } from "@/components/react/ImageInput";
 ---
 
 <BaseLayout
@@ -13,6 +14,7 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
             >
                 IndexDB Liger
             </h1>
+            <ImageInput client:load/>
         </div>
     </section>
 </BaseLayout>

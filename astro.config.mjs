@@ -7,7 +7,7 @@ import cloudflare from '@astrojs/cloudflare'
 // https://astro.build/config
 export default defineConfig({
   site: process.env.CI
-    ? 'https://ssn-frontend.pages.dev'
+    ? 'https://indexdb-liger.pages.dev'
     : 'http://localhost:4321',
   integrations: [
     react(),
