@@ -12,6 +12,8 @@ import { ImageSearch } from './ImageSearch'
 import { ImagePreview } from './ImagePreview'
 import { ImageCard } from './ImageCard'
 import { createImageEmbedding } from '@/services/replicate'
+import { processInBatches } from '@/utils/batch'
+import { Progress } from '../ui/progress'
 
 interface ImageData {
   id: number
@@ -35,7 +37,13 @@ export function ImageGrid() {
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [previewImage, setPreviewImage] = useState<PreviewImage | null>(null)
   const debouncedSearch = useDebounce(searchQuery, 500)
+  const RECOVERY_BATCH_SIZE = 3
+  const [recoveryProgress, setRecoveryProgress] = useState<{
+    total: number
+    completed: number
+  } | null>(null)
 
+  // Updated version with progress tracking
   const recoverInterruptedEmbeddings = async (images: ImageData[]) => {
     const imagesWithoutEmbeddings = images.filter(
       (img) => img.isProcessing || !img.embeddings,
@@ -45,29 +53,44 @@ export function ImageGrid() {
 
     try {
       setIsRecovering(true)
+      setRecoveryProgress({
+        total: imagesWithoutEmbeddings.length,
+        completed: 0,
+      })
+
       console.log(
-        `Recovering ${imagesWithoutEmbeddings.length} interrupted embeddings...`,
+        `Recovering ${imagesWithoutEmbeddings.length} interrupted embeddings in batches of ${RECOVERY_BATCH_SIZE}...`,
       )
 
-      for (const image of imagesWithoutEmbeddings) {
-        try {
-          const blob = await indexDBService.getImage(image.id)
-          const file = new File([blob], image.name || 'image.jpg', {
-            type: blob.type,
-          })
+      await processInBatches(
+        imagesWithoutEmbeddings,
+        RECOVERY_BATCH_SIZE,
+        async (image) => {
+          try {
+            const blob = await indexDBService.getImage(image.id)
+            const file = new File([blob], String(image.id) || 'image.jpg', {
+              type: blob.type,
+            })
 
-          const embeddings = await createImageEmbedding(file)
-          await indexDBService.updateImageEmbeddings(image.id, embeddings)
-          eventBus.emit('imageProcessed')
-        } catch (error) {
-          console.error(
-            `Failed to recover embeddings for image ${image.id}:`,
-            error,
-          )
-        }
-      }
+            const embeddings = await createImageEmbedding(file)
+            await indexDBService.updateImageEmbeddings(image.id, embeddings)
+            eventBus.emit('imageProcessed')
+
+            setRecoveryProgress((prev) => ({
+              ...prev!,
+              completed: prev!.completed + 1,
+            }))
+          } catch (error) {
+            console.error(
+              `Failed to recover embeddings for image ${image.id}:`,
+              error,
+            )
+          }
+        },
+      )
     } finally {
       setIsRecovering(false)
+      setRecoveryProgress(null)
     }
   }
 
@@ -177,6 +200,27 @@ export function ImageGrid() {
 
   return (
     <>
+      {recoveryProgress && (
+        <div className="mb-4 space-y-2 rounded-lg border border-border p-4">
+          <div className="flex justify-between text-sm text-muted-foreground">
+            <span>
+              Recovering interrupted uploads ({recoveryProgress.completed} of{' '}
+              {recoveryProgress.total})
+            </span>
+            <span>
+              {(
+                (recoveryProgress.completed / recoveryProgress.total) *
+                100
+              ).toFixed(0)}
+              %
+            </span>
+          </div>
+          <Progress
+            value={(recoveryProgress.completed / recoveryProgress.total) * 100}
+            className="h-1"
+          />
+        </div>
+      )}
       <ImageSearch
         value={searchQuery}
         onChange={setSearchQuery}
