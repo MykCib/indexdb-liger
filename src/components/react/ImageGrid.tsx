@@ -20,6 +20,7 @@ interface ImageData {
   url: string
   embeddings?: number[]
   isProcessing?: boolean
+  name: string
 }
 
 interface PreviewImage {
@@ -43,7 +44,6 @@ export function ImageGrid() {
     completed: number
   } | null>(null)
 
-  // Updated version with progress tracking
   const recoverInterruptedEmbeddings = async (images: ImageData[]) => {
     const imagesWithoutEmbeddings = images.filter(
       (img) => img.isProcessing || !img.embeddings,
@@ -57,10 +57,6 @@ export function ImageGrid() {
         total: imagesWithoutEmbeddings.length,
         completed: 0,
       })
-
-      console.log(
-        `Recovering ${imagesWithoutEmbeddings.length} interrupted embeddings in batches of ${RECOVERY_BATCH_SIZE}...`,
-      )
 
       await processInBatches(
         imagesWithoutEmbeddings,
@@ -98,22 +94,22 @@ export function ImageGrid() {
     try {
       const records = await indexDBService.getAllImages()
       const imagePromises = records.map(async (record) => {
-        if (!record?.id) return
+        if (!record?.id) return undefined
         const blob = await indexDBService.getImage(record.id)
         return {
           id: record.id,
           name: record.name,
           url: URL.createObjectURL(blob),
-          embeddings: record.embeddings,
-          isProcessing: record.isProcessing,
-        }
+          embeddings: record.embeddings || [],
+          isProcessing: record.isProcessing || false,
+        } as ImageData
       })
 
-      const loadedImages = (await Promise.all(imagePromises)).filter(
-        (img): img is ImageData => img !== undefined,
-      )
+      const loadedImages = (await Promise.all(imagePromises))
+        .filter((img): img is NonNullable<typeof img> => img !== undefined)
+        .sort((a, b) => b.id - a.id)
 
-      setImages(loadedImages.sort((a, b) => b.id - a.id))
+      setImages(loadedImages)
     } catch (error) {
       console.error('Failed to load images:', error)
     } finally {
@@ -125,14 +121,17 @@ export function ImageGrid() {
     const initializeGallery = async () => {
       await indexDBService.init()
       await loadImages()
-      // Only try to recover embeddings on initial load
       const records = await indexDBService.getAllImages()
-      recoverInterruptedEmbeddings(records)
+      const recordsWithUrl = records.map((r) => ({
+        ...r,
+        url: '',
+        embeddings: r.embeddings || [],
+      })) as ImageData[]
+      recoverInterruptedEmbeddings(recordsWithUrl)
     }
 
     initializeGallery()
 
-    // Regular update subscriptions
     const unsubscribe1 = eventBus.subscribe('imageUploaded', loadImages)
     const unsubscribe2 = eventBus.subscribe('imageProcessed', loadImages)
 
@@ -153,7 +152,14 @@ export function ImageGrid() {
       try {
         setSearching(true)
         const searchEmbeddings = await getTextEmbeddings(debouncedSearch)
-        const results = rankImagesBySimilarity(searchEmbeddings, images)
+        const imagesWithEmbeddings = images.map((img) => ({
+          ...img,
+          embeddings: img.embeddings || [],
+        }))
+        const results = rankImagesBySimilarity(
+          searchEmbeddings,
+          imagesWithEmbeddings,
+        )
         setFilteredImages(results)
       } catch (error) {
         console.error('Search failed:', error)

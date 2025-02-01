@@ -17,7 +17,7 @@ interface UploadProgress {
 
 export const ImageInput = () => {
   const [isUploading, setIsUploading] = useState(false)
-  const [progress, setProgress] = useState<UploadProgress | null>(null)
+  const [progress, setProgress] = useState<UploadProgress | null>()
   const inputRef = useRef<HTMLInputElement>(null)
 
   const BATCH_SIZE = 3 // Process 3 images at a time
@@ -110,12 +110,6 @@ export const ImageInput = () => {
       {progress && (
         <div className="space-y-2">
           <div className="flex flex-col gap-1 text-sm text-muted-foreground">
-            <div className="flex justify-between">
-              <span>Processing: {progress.processing}</span>
-              <span>
-                {progress.current + 1} of {progress.total}
-              </span>
-            </div>
             <div className="flex justify-between text-xs">
               <span>{progress.completed} images uploaded</span>
               <span>
@@ -125,7 +119,7 @@ export const ImageInput = () => {
             </div>
           </div>
           <Progress
-            value={(progress.current / progress.total) * 100}
+            value={(progress.completed / progress.total) * 100}
             className="h-2"
           />
         </div>
