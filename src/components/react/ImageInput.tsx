@@ -6,6 +6,7 @@ import { eventBus } from '@/services/eventBus'
 import { Loader2, Upload } from 'lucide-react'
 import { Progress } from '@/components/ui/progress'
 import { createImageEmbedding } from '@/services/replicate'
+import { processInBatches } from '@/utils/batch'
 
 interface UploadProgress {
   total: number
@@ -19,6 +20,8 @@ export const ImageInput = () => {
   const [progress, setProgress] = useState<UploadProgress | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  const BATCH_SIZE = 3 // Process 3 images at a time
+
   const handleFileChange = async (
     event: React.ChangeEvent<HTMLInputElement>,
   ) => {
@@ -31,44 +34,43 @@ export const ImageInput = () => {
         total: files.length,
         completed: 0,
         current: 0,
-        processing: files[0].name,
+        processing: 'Uploading images...',
       })
 
       // First, quickly save all images without embeddings and collect their IDs
-      const savedImageIds: number[] = []
-      for (const file of files) {
-        const id = await indexDBService.saveImage(file)
-        savedImageIds.push(id)
-        eventBus.emit('imageUploaded')
-      }
+      const savedImageIds = await Promise.all(
+        files.map(async (file) => {
+          const id = await indexDBService.saveImage(file)
+          eventBus.emit('imageUploaded')
+          return { id, file }
+        }),
+      )
 
-      // Then process embeddings in the background
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i]
-        const imageId = savedImageIds[i]
+      // Process embeddings in batches
+      setProgress((prev) => ({
+        ...prev!,
+        processing: 'Generating embeddings...',
+      }))
 
-        setProgress((prev) => ({
-          ...prev!,
-          current: i,
-          processing: file.name,
-        }))
+      await processInBatches(
+        savedImageIds,
+        BATCH_SIZE,
+        async ({ id, file }) => {
+          try {
+            const embeddings = await createImageEmbedding(file)
+            await indexDBService.updateImageEmbeddings(id, embeddings)
 
-        try {
-          const embeddings = await createImageEmbedding(file)
-          await indexDBService.updateImageEmbeddings(imageId, embeddings)
+            setProgress((prev) => ({
+              ...prev!,
+              completed: prev!.completed + 1,
+            }))
 
-          setProgress((prev) => ({
-            ...prev!,
-            completed: prev!.completed + 1,
-          }))
-
-          // Notify about embedding update
-          eventBus.emit('imageProcessed')
-        } catch (error) {
-          console.error(`Failed to process ${file.name}:`, error)
-          continue
-        }
-      }
+            eventBus.emit('imageProcessed')
+          } catch (error) {
+            console.error(`Failed to process ${file.name}:`, error)
+          }
+        },
+      )
 
       if (inputRef.current) {
         inputRef.current.value = ''
