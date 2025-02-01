@@ -38,7 +38,7 @@ export function ImageGrid() {
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [previewImage, setPreviewImage] = useState<PreviewImage | null>(null)
   const debouncedSearch = useDebounce(searchQuery, 500)
-  const RECOVERY_BATCH_SIZE = 3
+  const RECOVERY_BATCH_SIZE = 2
   const [recoveryProgress, setRecoveryProgress] = useState<{
     total: number
     completed: number

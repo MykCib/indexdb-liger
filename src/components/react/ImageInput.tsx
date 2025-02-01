@@ -20,7 +20,7 @@ export const ImageInput = () => {
   const [progress, setProgress] = useState<UploadProgress | null>()
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const BATCH_SIZE = 3 // Process 3 images at a time
+  const BATCH_SIZE = 2 // Process 3 images at a time
 
   const handleFileChange = async (
     event: React.ChangeEvent<HTMLInputElement>,
@@ -111,7 +111,7 @@ export const ImageInput = () => {
         <div className="space-y-2">
           <div className="flex flex-col gap-1 text-sm text-muted-foreground">
             <div className="flex justify-between text-xs">
-              <span>{progress.completed} images uploaded</span>
+              <span>{progress.completed} images embedded</span>
               <span>
                 {((progress.completed / progress.total) * 100).toFixed(0)}%
                 complete
