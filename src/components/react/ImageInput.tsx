@@ -20,7 +20,7 @@ export const ImageInput = () => {
   const [progress, setProgress] = useState<UploadProgress | null>()
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const BATCH_SIZE = 2 // Process 3 images at a time
+  const BATCH_SIZE = 1 // Process 3 images at a time
 
   const handleFileChange = async (
     event: React.ChangeEvent<HTMLInputElement>,
