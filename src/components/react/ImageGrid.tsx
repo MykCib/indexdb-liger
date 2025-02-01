@@ -11,11 +11,13 @@ import {
 import { ImageSearch } from './ImageSearch'
 import { ImagePreview } from './ImagePreview'
 import { ImageCard } from './ImageCard'
+import { createImageEmbedding } from '@/services/replicate'
 
 interface ImageData {
   id: number
   url: string
-  embeddings: number[]
+  embeddings?: number[]
+  isProcessing?: boolean
 }
 
 interface PreviewImage {
@@ -44,12 +46,12 @@ export function ImageGrid() {
             id: record.id,
             url: URL.createObjectURL(blob),
             embeddings: record.embeddings,
+            isProcessing: record.isProcessing,
           }
         })
 
         const loadedImages = (await Promise.all(imagePromises)).filter(
-          (img): img is ImageData =>
-            img !== undefined && Array.isArray(img.embeddings),
+          (img): img is ImageData => img !== undefined,
         )
         setImages(loadedImages.sort((a, b) => b.id - a.id))
       } catch (error) {
@@ -60,10 +62,12 @@ export function ImageGrid() {
     }
 
     indexDBService.init().then(() => loadImages())
-    const unsubscribe = eventBus.subscribe('imageUploaded', loadImages)
+    const unsubscribe1 = eventBus.subscribe('imageUploaded', loadImages)
+    const unsubscribe2 = eventBus.subscribe('imageProcessed', loadImages)
 
     return () => {
-      unsubscribe()
+      unsubscribe1()
+      unsubscribe2()
       images.forEach((img) => URL.revokeObjectURL(img.url))
     }
   }, [])

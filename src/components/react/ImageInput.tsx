@@ -9,6 +9,7 @@ import { createImageEmbedding } from '@/services/replicate'
 
 interface UploadProgress {
   total: number
+  completed: number
   current: number
   processing: string
 }
@@ -28,36 +29,47 @@ export const ImageInput = () => {
       setIsUploading(true)
       setProgress({
         total: files.length,
+        completed: 0,
         current: 0,
         processing: files[0].name,
       })
 
-      // Process files sequentially
+      // First, quickly save all images without embeddings and collect their IDs
+      const savedImageIds: number[] = []
+      for (const file of files) {
+        const id = await indexDBService.saveImage(file)
+        savedImageIds.push(id)
+        eventBus.emit('imageUploaded')
+      }
+
+      // Then process embeddings in the background
       for (let i = 0; i < files.length; i++) {
         const file = files[i]
+        const imageId = savedImageIds[i]
+
         setProgress((prev) => ({
-          total: prev!.total,
+          ...prev!,
           current: i,
           processing: file.name,
         }))
 
         try {
-          // Generate embeddings for current file
           const embeddings = await createImageEmbedding(file)
+          await indexDBService.updateImageEmbeddings(imageId, embeddings)
 
-          // Save image with embeddings
-          await indexDBService.saveImage(file, embeddings)
+          setProgress((prev) => ({
+            ...prev!,
+            completed: prev!.completed + 1,
+          }))
+
+          // Notify about embedding update
+          eventBus.emit('imageProcessed')
         } catch (error) {
           console.error(`Failed to process ${file.name}:`, error)
-          // Continue with next file even if current fails
           continue
         }
       }
 
-      // Notify about completion
-      eventBus.emit('imageUploaded')
-
-      // Clear input
       if (inputRef.current) {
         inputRef.current.value = ''
       }
@@ -79,7 +91,7 @@ export const ImageInput = () => {
             id="picture"
             type="file"
             accept="image/*"
-            multiple // Enable multiple file selection
+            multiple
             onChange={handleFileChange}
             disabled={isUploading}
             className={isUploading ? 'pr-10' : ''}
@@ -95,19 +107,33 @@ export const ImageInput = () => {
       {/* Upload Progress */}
       {progress && (
         <div className="space-y-2">
-          <div className="flex justify-between text-sm text-muted-foreground">
-            <span>Processing: {progress.processing}</span>
-            <span>
-              {progress.current + 1} of {progress.total}
-            </span>
+          <div className="flex flex-col gap-1 text-sm text-muted-foreground">
+            <div className="flex justify-between">
+              <span>Processing: {progress.processing}</span>
+              <span>
+                {progress.current + 1} of {progress.total}
+              </span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span>{progress.completed} images uploaded</span>
+              <span>
+                {((progress.completed / progress.total) * 100).toFixed(0)}%
+                complete
+              </span>
+            </div>
           </div>
-          <Progress value={(progress.current / progress.total) * 100} />
+          <Progress
+            value={(progress.current / progress.total) * 100}
+            className="h-2"
+          />
         </div>
       )}
 
       {/* Drag and Drop Area */}
       <div
-        className={`flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 ${isUploading ? 'opacity-50' : 'cursor-pointer hover:border-primary'} `}
+        className={`flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 ${
+          isUploading ? 'opacity-50' : 'cursor-pointer hover:border-primary'
+        }`}
         onClick={() => !isUploading && inputRef.current?.click()}
         onDragOver={(e) => {
           e.preventDefault()
@@ -120,12 +146,9 @@ export const ImageInput = () => {
 
           const files = Array.from(e.dataTransfer.files)
           if (files.length > 0 && inputRef.current) {
-            // Create a new FileList-like object
             const dataTransfer = new DataTransfer()
             files.forEach((file) => dataTransfer.items.add(file))
             inputRef.current.files = dataTransfer.files
-
-            // Trigger onChange
             inputRef.current.dispatchEvent(
               new Event('change', { bubbles: true }),
             )
@@ -136,6 +159,11 @@ export const ImageInput = () => {
         <p className="text-sm text-muted-foreground">
           Drag and drop images here or click to select
         </p>
+        {isUploading && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Images will appear as they are processed
+          </p>
+        )}
       </div>
     </div>
   )

@@ -4,6 +4,7 @@ import { Button } from '../ui/button'
 interface ImageCardProps {
   id: number
   url: string
+  isProcessing?: boolean
   onDelete: (id: number, e: React.MouseEvent) => Promise<void>
   onPreview: (image: { id: number; url: string }) => void
   isDeleting: boolean
@@ -12,6 +13,7 @@ interface ImageCardProps {
 export function ImageCard({
   id,
   url,
+  isProcessing,
   onDelete,
   onPreview,
   isDeleting,
@@ -26,6 +28,11 @@ export function ImageCard({
         alt={`Image ${id}`}
         className="h-full w-full object-cover"
       />
+      {isProcessing && (
+        <div className="absolute left-2 top-2">
+          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+        </div>
+      )}
       <Button
         variant="destructive"
         size="icon"

@@ -3,7 +3,8 @@ interface ImageData {
   name: string
   type: string
   data: ArrayBuffer
-  embeddings: number[]
+  embeddings?: number[]
+  isProcessing?: boolean
   timestamp: number
 }
 
@@ -34,7 +35,7 @@ export class IndexDBService {
     })
   }
 
-  async saveImage(file: File, embeddings: number[]): Promise<number> {
+  async saveImage(file: File): Promise<number> {
     if (!this.db) throw new Error('Database not initialized')
 
     const arrayBuffer = await file.arrayBuffer()
@@ -47,12 +48,33 @@ export class IndexDBService {
         name: file.name,
         type: file.type,
         data: arrayBuffer,
-        embeddings,
+        isProcessing: true, // Mark as processing initially
         timestamp: Date.now(),
       })
 
       request.onerror = () => reject(request.error)
       request.onsuccess = () => resolve(request.result as number)
+    })
+  }
+
+  async updateImageEmbeddings(id: number, embeddings: number[]): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized')
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([this.STORE_NAME], 'readwrite')
+      const store = transaction.objectStore(this.STORE_NAME)
+
+      const getRequest = store.get(id)
+      getRequest.onsuccess = () => {
+        const imageData = getRequest.result
+        imageData.embeddings = embeddings
+        imageData.isProcessing = false
+
+        const updateRequest = store.put(imageData)
+        updateRequest.onerror = () => reject(updateRequest.error)
+        updateRequest.onsuccess = () => resolve()
+      }
+      getRequest.onerror = () => reject(getRequest.error)
     })
   }
 
