@@ -27,41 +27,89 @@ interface PreviewImage {
 
 export function ImageGrid() {
   const [images, setImages] = useState<ImageData[]>([])
-  const [filteredImages, setFilteredImages] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(true)
+  const [isRecovering, setIsRecovering] = useState(false)
+  const [filteredImages, setFilteredImages] = useState<SearchResult[]>([])
   const [searching, setSearching] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [previewImage, setPreviewImage] = useState<PreviewImage | null>(null)
   const debouncedSearch = useDebounce(searchQuery, 500)
 
-  useEffect(() => {
-    const loadImages = async () => {
-      try {
-        const records = await indexDBService.getAllImages()
-        const imagePromises = records.map(async (record) => {
-          if (!record?.id) return
-          const blob = await indexDBService.getImage(record.id)
-          return {
-            id: record.id,
-            url: URL.createObjectURL(blob),
-            embeddings: record.embeddings,
-            isProcessing: record.isProcessing,
-          }
-        })
+  const recoverInterruptedEmbeddings = async (images: ImageData[]) => {
+    const imagesWithoutEmbeddings = images.filter(
+      (img) => img.isProcessing || !img.embeddings,
+    )
 
-        const loadedImages = (await Promise.all(imagePromises)).filter(
-          (img): img is ImageData => img !== undefined,
-        )
-        setImages(loadedImages.sort((a, b) => b.id - a.id))
-      } catch (error) {
-        console.error('Failed to load images:', error)
-      } finally {
-        setLoading(false)
+    if (imagesWithoutEmbeddings.length === 0 || isRecovering) return
+
+    try {
+      setIsRecovering(true)
+      console.log(
+        `Recovering ${imagesWithoutEmbeddings.length} interrupted embeddings...`,
+      )
+
+      for (const image of imagesWithoutEmbeddings) {
+        try {
+          const blob = await indexDBService.getImage(image.id)
+          const file = new File([blob], image.name || 'image.jpg', {
+            type: blob.type,
+          })
+
+          const embeddings = await createImageEmbedding(file)
+          await indexDBService.updateImageEmbeddings(image.id, embeddings)
+          eventBus.emit('imageProcessed')
+        } catch (error) {
+          console.error(
+            `Failed to recover embeddings for image ${image.id}:`,
+            error,
+          )
+        }
       }
+    } finally {
+      setIsRecovering(false)
+    }
+  }
+
+  const loadImages = async () => {
+    try {
+      const records = await indexDBService.getAllImages()
+      const imagePromises = records.map(async (record) => {
+        if (!record?.id) return
+        const blob = await indexDBService.getImage(record.id)
+        return {
+          id: record.id,
+          name: record.name,
+          url: URL.createObjectURL(blob),
+          embeddings: record.embeddings,
+          isProcessing: record.isProcessing,
+        }
+      })
+
+      const loadedImages = (await Promise.all(imagePromises)).filter(
+        (img): img is ImageData => img !== undefined,
+      )
+
+      setImages(loadedImages.sort((a, b) => b.id - a.id))
+    } catch (error) {
+      console.error('Failed to load images:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    const initializeGallery = async () => {
+      await indexDBService.init()
+      await loadImages()
+      // Only try to recover embeddings on initial load
+      const records = await indexDBService.getAllImages()
+      recoverInterruptedEmbeddings(records)
     }
 
-    indexDBService.init().then(() => loadImages())
+    initializeGallery()
+
+    // Regular update subscriptions
     const unsubscribe1 = eventBus.subscribe('imageUploaded', loadImages)
     const unsubscribe2 = eventBus.subscribe('imageProcessed', loadImages)
 
