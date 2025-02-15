@@ -4,9 +4,9 @@ import { indexDBService } from '@/services/indexdb'
 import { useEffect, useRef, useState } from 'react'
 import { eventBus } from '@/services/eventBus'
 import { Loader2, Upload } from 'lucide-react'
-import { Progress } from '@/components/ui/progress'
-import { processInBatches } from '@/utils/batch'
-import { embeddingsService, type ProgressState } from '@/services/embeddings'
+import { embeddingsService } from '@/services/embeddings'
+import { Progress } from '../ui/progress'
+import { Button } from '../ui/button'
 
 interface UploadProgress {
   total: number
@@ -15,25 +15,68 @@ interface UploadProgress {
   processing: string
 }
 
+interface ModelStatus {
+  isLoaded: boolean
+}
+
+interface StorageInfo {
+  usedSpace: number
+}
+
+const formatBytes = (bytes: number): string => {
+  if (bytes === 0) return '0 Bytes'
+  const k = 1024
+  const sizes = ['Bytes', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`
+}
+
 export const ImageInput = () => {
   const [isUploading, setIsUploading] = useState(false)
   const [progress, setProgress] = useState<UploadProgress | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const [imageModelStatus, setImageModelStatus] =
-    useState<ProgressState | null>(null)
-  const [textModelStatus, setTextModelStatus] = useState<ProgressState | null>(
-    null,
-  )
+  const [imageModelStatus, setImageModelStatus] = useState<ModelStatus>({
+    isLoaded: false,
+  })
+  const [textModelStatus, setTextModelStatus] = useState<ModelStatus>({
+    isLoaded: false,
+  })
+  const [storageInfo, setStorageInfo] = useState<StorageInfo>({ usedSpace: 0 })
+
+  const updateStorageInfo = async () => {
+    try {
+      const info = await indexDBService.getStorageInfo()
+      setStorageInfo(info)
+    } catch (error) {
+      console.error('Failed to update storage info:', error)
+    }
+  }
 
   useEffect(() => {
-    embeddingsService.onImageProgress(setImageModelStatus)
-    embeddingsService.onTextProgress(setTextModelStatus)
+    const init = async () => {
+      try {
+        await indexDBService.init()
+        await updateStorageInfo()
 
-    // Load models on mount
-    Promise.all([
-      embeddingsService.loadImageModel(),
-      embeddingsService.loadTextModel(),
-    ]).catch(console.error)
+        await embeddingsService.loadTextModel()
+        setTextModelStatus({ isLoaded: true })
+
+        await embeddingsService.loadImageModel()
+        setImageModelStatus({ isLoaded: true })
+      } catch (error) {
+        console.error('Failed to initialize:', error)
+      }
+    }
+
+    init()
+
+    const unsubscribe1 = eventBus.subscribe('imageUploaded', updateStorageInfo)
+    const unsubscribe2 = eventBus.subscribe('imageDeleted', updateStorageInfo)
+
+    return () => {
+      unsubscribe1()
+      unsubscribe2()
+    }
   }, [])
 
   const handleFileChange = async (
@@ -58,7 +101,7 @@ export const ImageInput = () => {
 
           const embeddings = await embeddingsService.createImageEmbedding(file)
           await indexDBService.updateImageEmbeddings(id, embeddings)
-          eventBus.emit('imageProcessed') // Make sure we emit this event
+          eventBus.emit('imageProcessed')
 
           setProgress(
             (prev) =>
@@ -77,25 +120,40 @@ export const ImageInput = () => {
     }
   }
 
+  const handleDeleteAll = async () => {
+    try {
+      await indexDBService.deleteAllImages()
+      eventBus.emit('imageDeleted')
+    } catch (error) {
+      console.error('Failed to delete all images:', error)
+    }
+  }
+
   return (
     <div className="space-y-4">
-      {imageModelStatus && (
-        <div className="space-y-2">
-          <div className="flex flex-col gap-1 text-sm text-muted-foreground">
-            <span>{imageModelStatus.status}</span>
-            <Progress value={imageModelStatus.progress} className="h-2" />
-          </div>
+      <div className="flex gap-4">
+        <div className="flex items-center gap-2">
+          <div
+            className={`h-2 w-2 rounded-full ${textModelStatus.isLoaded ? 'bg-green-500' : 'bg-gray-300'}`}
+          />
+          <span className="text-sm text-muted-foreground">Text Model</span>
         </div>
-      )}
-      {textModelStatus && (
-        <div className="space-y-2">
-          <div className="flex flex-col gap-1 text-sm text-muted-foreground">
-            <span>{textModelStatus.status}</span>
-            <Progress value={textModelStatus.progress} className="h-2" />
-          </div>
+        <div className="flex items-center gap-2">
+          <div
+            className={`h-2 w-2 rounded-full ${imageModelStatus.isLoaded ? 'bg-green-500' : 'bg-gray-300'}`}
+          />
+          <span className="text-sm text-muted-foreground">Image Model</span>
         </div>
-      )}
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">
+            Storage: {formatBytes(storageInfo.usedSpace)}
+          </span>
+        </div>
+      </div>
       <div className="grid w-full max-w-sm items-center gap-1.5">
+        <Button onClick={handleDeleteAll} variant="destructive">
+          delete all images
+        </Button>
         <Label htmlFor="picture">Images</Label>
         <div className="relative">
           <Input

@@ -15,6 +15,8 @@ export class IndexDBService {
   private readonly DB_VERSION = 1
 
   async init(): Promise<void> {
+    if (this.db) return // Already initialized
+
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(this.DB_NAME, this.DB_VERSION)
 
@@ -121,6 +123,38 @@ export class IndexDBService {
 
       request.onerror = () => reject(request.error)
       request.onsuccess = () => resolve()
+    })
+  }
+
+  async deleteAllImages(): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized')
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([this.STORE_NAME], 'readwrite')
+      const store = transaction.objectStore(this.STORE_NAME)
+      const request = store.clear()
+
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => resolve()
+    })
+  }
+
+  async getStorageInfo(): Promise<{ usedSpace: number }> {
+    if (!this.db) throw new Error('Database not initialized')
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([this.STORE_NAME], 'readonly')
+      const store = transaction.objectStore(this.STORE_NAME)
+      const request = store.getAll()
+
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => {
+        const totalBytes = request.result.reduce(
+          (acc, img) => acc + (img.data as ArrayBuffer).byteLength,
+          0,
+        )
+        resolve({ usedSpace: totalBytes })
+      }
     })
   }
 }

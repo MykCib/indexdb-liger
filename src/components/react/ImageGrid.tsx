@@ -16,7 +16,7 @@ import { embeddingsService } from '@/services/embeddings'
 interface ImageData {
   id: number
   url: string
-  embeddings?: number[]
+  embeddings: number[]
   isProcessing?: boolean
   name: string
 }
@@ -80,10 +80,12 @@ export function ImageGrid() {
 
     const unsubscribe1 = eventBus.subscribe('imageUploaded', loadImages)
     const unsubscribe2 = eventBus.subscribe('imageProcessed', loadImages)
+    const unsubscribe3 = eventBus.subscribe('imageDeleted', loadImages)
 
     return () => {
       unsubscribe1()
       unsubscribe2()
+      unsubscribe3()
       images.forEach((img) => URL.revokeObjectURL(img.url))
       blobUrlsRef.current.forEach((url) => URL.revokeObjectURL(url))
       blobUrlsRef.current.clear()
@@ -114,35 +116,8 @@ export function ImageGrid() {
         setSearching(true)
         // Ensure models are loaded before searching
         await embeddingsService.loadTextModel()
-
         const searchEmbeddings = await getTextEmbeddings(debouncedSearch)
-        const records = await indexDBService.getAllImages()
-        const imagePromises = records.map(async (record) => {
-          if (!record?.id) return undefined
-          const blob = await indexDBService.getImage(record.id)
-          const url = URL.createObjectURL(blob)
-          blobUrlsRef.current.add(url) // Track new URL
-
-          return {
-            id: record.id,
-            name: record.name,
-            url,
-            embeddings: record.embeddings || [],
-            isProcessing: record.isProcessing || false,
-          } as ImageData
-        })
-
-        const loadedImages = (await Promise.all(imagePromises))
-          .filter((img): img is NonNullable<typeof img> => img !== undefined)
-          .sort((a, b) => b.id - a.id)
-        const imagesWithEmbeddings = loadedImages.map((img) => ({
-          ...img,
-          embeddings: img.embeddings || [],
-        }))
-        const results = rankImagesBySimilarity(
-          searchEmbeddings,
-          imagesWithEmbeddings,
-        )
+        const results = rankImagesBySimilarity(searchEmbeddings, images)
         setFilteredImages(results)
       } catch (error) {
         console.error('Search failed:', error)
@@ -167,6 +142,7 @@ export function ImageGrid() {
         }
         return updatedImages
       })
+      eventBus.emit('imageDeleted')
     } catch (error) {
       console.error('Failed to delete image:', error)
     } finally {
