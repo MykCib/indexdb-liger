@@ -1,87 +1,25 @@
 import type { APIRoute } from 'astro'
-export const prerender = false
+import Replicate from 'replicate'
 
-function textToBase64(text: string): string {
-  return btoa(unescape(encodeURIComponent(text)))
-}
+export const prerender = false
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const REPLICATE_API_TOKEN = locals.runtime.env.REPLICATE_API_TOKEN
 
   try {
     const { searchText } = await request.json()
+    const replicate = new Replicate({ auth: REPLICATE_API_TOKEN })
 
-    // Convert text to base64 using the browser-compatible function
-    const base64String = textToBase64(searchText)
-    const dataUrl = `data:text/plain;base64,${base64String}`
+    const input = {
+      text: searchText,
+      output_format: 'array',
+    }
 
-    const predictionResponse = await fetch(
-      'https://api.replicate.com/v1/predictions',
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Token ${REPLICATE_API_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          version:
-            '0383f62e173dc821ec52663ed22a076d9c970549c209666ac3db181618b7a304',
-          input: {
-            input: dataUrl,
-            modality: 'text',
-          },
-        }),
-      },
+    const output = await replicate.run(
+      'nomagick/jina-embeddings:56e621ea4c892c4466d79198982d0df62fcd08fc494cea5de3d8372644108fbe',
+      { input },
     )
-
-    const prediction = await predictionResponse.json()
-
-    if (prediction.error || prediction.detail) {
-      return new Response(
-        JSON.stringify({
-          error: prediction.error || prediction.detail,
-        }),
-        {
-          status: 400,
-        },
-      )
-    }
-
-    // Poll for results
-    const predictionId = prediction.id
-    let embeddings = null
-    let attempts = 0
-    const maxAttempts = 30
-
-    while (!embeddings && attempts < maxAttempts) {
-      const statusResponse = await fetch(
-        `https://api.replicate.com/v1/predictions/${predictionId}`,
-        {
-          headers: {
-            Authorization: `Token ${REPLICATE_API_TOKEN}`,
-          },
-        },
-      )
-
-      const status = await statusResponse.json()
-
-      if (status.status === 'succeeded') {
-        embeddings = status.output
-        break
-      } else if (status.status === 'failed') {
-        return new Response(
-          JSON.stringify({ error: 'Embedding generation failed' }),
-          {
-            status: 400,
-          },
-        )
-      }
-
-      attempts++
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-    }
-
-    return new Response(JSON.stringify({ embeddings }), {
+    return new Response(JSON.stringify({ embeddings: output }), {
       status: 200,
       headers: {
         'Content-Type': 'application/json',
@@ -89,8 +27,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
     })
   } catch (error) {
     console.error('API Error:', error)
-    return new Response(JSON.stringify(error), {
-      status: 500,
-    })
+    return new Response(JSON.stringify(error), { status: 500 })
   }
 }

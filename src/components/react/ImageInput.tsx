@@ -1,12 +1,12 @@
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { indexDBService } from '@/services/indexdb'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { eventBus } from '@/services/eventBus'
 import { Loader2, Upload } from 'lucide-react'
 import { Progress } from '@/components/ui/progress'
-import { createImageEmbedding } from '@/services/replicate'
 import { processInBatches } from '@/utils/batch'
+import { embeddingsService, type ProgressState } from '@/services/embeddings'
 
 interface UploadProgress {
   total: number
@@ -17,10 +17,24 @@ interface UploadProgress {
 
 export const ImageInput = () => {
   const [isUploading, setIsUploading] = useState(false)
-  const [progress, setProgress] = useState<UploadProgress | null>()
+  const [progress, setProgress] = useState<UploadProgress | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const [imageModelStatus, setImageModelStatus] =
+    useState<ProgressState | null>(null)
+  const [textModelStatus, setTextModelStatus] = useState<ProgressState | null>(
+    null,
+  )
 
-  const BATCH_SIZE = 1 // Process 3 images at a time
+  useEffect(() => {
+    embeddingsService.onImageProgress(setImageModelStatus)
+    embeddingsService.onTextProgress(setTextModelStatus)
+
+    // Load models on mount
+    Promise.all([
+      embeddingsService.loadImageModel(),
+      embeddingsService.loadTextModel(),
+    ]).catch(console.error)
+  }, [])
 
   const handleFileChange = async (
     event: React.ChangeEvent<HTMLInputElement>,
@@ -34,49 +48,29 @@ export const ImageInput = () => {
         total: files.length,
         completed: 0,
         current: 0,
-        processing: 'Uploading images...',
+        processing: 'Processing images...',
       })
 
-      // First, quickly save all images without embeddings and collect their IDs
-      const savedImageIds = await Promise.all(
-        files.map(async (file) => {
+      for (const file of files) {
+        try {
           const id = await indexDBService.saveImage(file)
           eventBus.emit('imageUploaded')
-          return { id, file }
-        }),
-      )
 
-      // Process embeddings in batches
-      setProgress((prev) => ({
-        ...prev!,
-        processing: 'Generating embeddings...',
-      }))
+          const embeddings = await embeddingsService.createImageEmbedding(file)
+          await indexDBService.updateImageEmbeddings(id, embeddings)
+          eventBus.emit('imageProcessed') // Make sure we emit this event
 
-      await processInBatches(
-        savedImageIds,
-        BATCH_SIZE,
-        async ({ id, file }) => {
-          try {
-            const embeddings = await createImageEmbedding(file)
-            await indexDBService.updateImageEmbeddings(id, embeddings)
-
-            setProgress((prev) => ({
-              ...prev!,
-              completed: prev!.completed + 1,
-            }))
-
-            eventBus.emit('imageProcessed')
-          } catch (error) {
-            console.error(`Failed to process ${file.name}:`, error)
-          }
-        },
-      )
-
-      if (inputRef.current) {
-        inputRef.current.value = ''
+          setProgress(
+            (prev) =>
+              prev && {
+                ...prev,
+                completed: prev.completed + 1,
+              },
+          )
+        } catch (error) {
+          console.error(`Failed to process ${file.name}:`, error)
+        }
       }
-    } catch (error) {
-      console.error('Failed to process files:', error)
     } finally {
       setIsUploading(false)
       setProgress(null)
@@ -85,6 +79,22 @@ export const ImageInput = () => {
 
   return (
     <div className="space-y-4">
+      {imageModelStatus && (
+        <div className="space-y-2">
+          <div className="flex flex-col gap-1 text-sm text-muted-foreground">
+            <span>{imageModelStatus.status}</span>
+            <Progress value={imageModelStatus.progress} className="h-2" />
+          </div>
+        </div>
+      )}
+      {textModelStatus && (
+        <div className="space-y-2">
+          <div className="flex flex-col gap-1 text-sm text-muted-foreground">
+            <span>{textModelStatus.status}</span>
+            <Progress value={textModelStatus.progress} className="h-2" />
+          </div>
+        </div>
+      )}
       <div className="grid w-full max-w-sm items-center gap-1.5">
         <Label htmlFor="picture">Images</Label>
         <div className="relative">
@@ -105,7 +115,6 @@ export const ImageInput = () => {
           )}
         </div>
       </div>
-
       {/* Upload Progress */}
       {progress && (
         <div className="space-y-2">
@@ -124,7 +133,6 @@ export const ImageInput = () => {
           />
         </div>
       )}
-
       {/* Drag and Drop Area */}
       <div
         className={`flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 ${

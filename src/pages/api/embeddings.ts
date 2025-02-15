@@ -13,23 +13,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const REPLICATE_API_TOKEN = locals.runtime.env.REPLICATE_API_TOKEN
 
   try {
-    console.log('Token exists:', !!REPLICATE_API_TOKEN)
-
     const formData = await request.formData()
     const file = formData.get('file') as File
-
-    console.log('File received:', {
-      name: file?.name,
-      type: file?.type,
-      size: file?.size,
-    })
 
     // Convert file to base64 using our custom function
     const arrayBuffer = await file.arrayBuffer()
     const base64String = arrayBufferToBase64(arrayBuffer)
     const dataUrl = `data:${file.type};base64,${base64String}`
-
-    console.log('Making prediction request to Replicate')
 
     const predictionResponse = await fetch(
       'https://api.replicate.com/v1/predictions',
@@ -51,12 +41,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
     )
 
     const prediction = await predictionResponse.json()
-
-    console.log('Prediction response:', {
-      status: predictionResponse.status,
-      ok: predictionResponse.ok,
-      prediction: prediction,
-    })
 
     if (!predictionResponse.ok) {
       return new Response(

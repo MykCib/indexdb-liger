@@ -48,7 +48,7 @@ export class IndexDBService {
         name: file.name,
         type: file.type,
         data: arrayBuffer,
-        isProcessing: true, // Mark as processing initially
+        isProcessing: false, // Set to false by default
         timestamp: Date.now(),
       })
 
@@ -67,8 +67,13 @@ export class IndexDBService {
       const getRequest = store.get(id)
       getRequest.onsuccess = () => {
         const imageData = getRequest.result
+        if (!imageData) {
+          reject(new Error('Image not found'))
+          return
+        }
+
         imageData.embeddings = embeddings
-        imageData.isProcessing = false
+        imageData.isProcessing = false // Ensure this is set to false
 
         const updateRequest = store.put(imageData)
         updateRequest.onerror = () => reject(updateRequest.error)
@@ -77,7 +82,6 @@ export class IndexDBService {
       getRequest.onerror = () => reject(getRequest.error)
     })
   }
-
   async getImage(id: number): Promise<Blob> {
     if (!this.db) throw new Error('Database not initialized')
 
